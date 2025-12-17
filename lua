@@ -384,3 +384,139 @@ task.spawn(function()
         end
     end
 end)
+
+------------------------------------------------
+-- ESP : Name + Health + Distance (Team Color)
+------------------------------------------------
+
+local ESPEnabled = false
+local ESPObjects = {}
+
+-- สีตามทีม
+local TeamColors = {
+    Guards = Color3.fromRGB(0, 85, 255),       -- น้ำเงินเข้ม
+    Inmates = Color3.fromRGB(255, 140, 0),     -- ส้ม
+    Criminals = Color3.fromRGB(170, 0, 0)      -- แดงเข้ม
+}
+
+-- Toggle
+ESPTab:Toggle({
+    Title = "ESP Full",
+    Default = false,
+    Callback = function(state)
+        ESPEnabled = state
+        for _, v in pairs(ESPObjects) do
+            for _, gui in pairs(v) do
+                gui.Enabled = state
+            end
+        end
+    end
+})
+
+-- สร้าง ESP
+local function CreateESP(plr)
+    if ESPObjects[plr] then return end
+    ESPObjects[plr] = {}
+
+    -- ===== Name + HP (บนหัว) =====
+    local HeadGui = Instance.new("BillboardGui")
+    HeadGui.Size = UDim2.new(0, 200, 0, 40)
+    HeadGui.StudsOffset = Vector3.new(0, 2.5, 0)
+    HeadGui.AlwaysOnTop = true
+    HeadGui.Enabled = ESPEnabled
+    HeadGui.Parent = game:GetService("CoreGui")
+
+    local NameLabel = Instance.new("TextLabel")
+    NameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    NameLabel.BackgroundTransparency = 1
+    NameLabel.TextScaled = false
+    NameLabel.TextSize = 14
+    NameLabel.Font = Enum.Font.SourceSansBold
+    NameLabel.TextStrokeTransparency = 0
+    NameLabel.Parent = HeadGui
+
+    local HPLabel = Instance.new("TextLabel")
+    HPLabel.Position = UDim2.new(0, 0, 0.5, 0)
+    HPLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    HPLabel.BackgroundTransparency = 1
+    HPLabel.TextScaled = false
+    HPLabel.TextSize = 14
+    HPLabel.Font = Enum.Font.SourceSans
+    HPLabel.TextStrokeTransparency = 0
+    HPLabel.Parent = HeadGui
+
+    -- ===== Distance (ใต้เท้า) =====
+    local FootGui = Instance.new("BillboardGui")
+    FootGui.Size = UDim2.new(0, 200, 0, 20)
+    FootGui.StudsOffset = Vector3.new(0, -3, 0)
+    FootGui.AlwaysOnTop = true
+    FootGui.Enabled = ESPEnabled
+    FootGui.Parent = game:GetService("CoreGui")
+
+    local DistLabel = Instance.new("TextLabel")
+    DistLabel.Size = UDim2.new(1, 0, 1, 0)
+    DistLabel.BackgroundTransparency = 1
+    DistLabel.TextSize = 14
+    DistLabel.Font = Enum.Font.SourceSans
+    DistLabel.TextStrokeTransparency = 0
+    DistLabel.Parent = FootGui
+
+    ESPObjects[plr] = {
+        HeadGui = HeadGui,
+        FootGui = FootGui,
+        NameLabel = NameLabel,
+        HPLabel = HPLabel,
+        DistLabel = DistLabel
+    }
+end
+
+-- ลบ ESP
+local function RemoveESP(plr)
+    if ESPObjects[plr] then
+        for _, v in pairs(ESPObjects[plr]) do
+            if typeof(v) == "Instance" then
+                v:Destroy()
+            end
+        end
+        ESPObjects[plr] = nil
+    end
+end
+
+-- อัปเดต ESP
+RunService.RenderStepped:Connect(function()
+    if not ESPEnabled then return end
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            if not ESPObjects[plr] then
+                CreateESP(plr)
+            end
+
+            local data = ESPObjects[plr]
+            local char = plr.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            local head = char and char:FindFirstChild("Head")
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+            if char and hum and head and hrp then
+                local teamColor = TeamColors[plr.Team and plr.Team.Name] or Color3.new(1,1,1)
+
+                data.HeadGui.Adornee = head
+                data.FootGui.Adornee = hrp
+
+                data.NameLabel.Text = plr.Name
+                data.NameLabel.TextColor3 = teamColor
+
+                data.HPLabel.Text = "HP: "..math.floor(hum.Health)
+                data.HPLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+
+                local dist = (LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude
+                data.DistLabel.Text = string.format("[ %.0f m ]", dist)
+                data.DistLabel.TextColor3 = teamColor
+            end
+        end
+    end
+end)
+
+-- ลบเมื่อออก
+Players.PlayerRemoving:Connect(RemoveESP)
