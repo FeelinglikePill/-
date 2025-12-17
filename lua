@@ -386,10 +386,13 @@ task.spawn(function()
 end)
 
 ------------------------------------------------
--- ESP : Name + Health + Distance (Team Color)
+-- ESP : Name / Health / Distance (Separate Toggles)
 ------------------------------------------------
 
-local ESPEnabled = false
+local ESP_Name = false
+local ESP_Health = false
+local ESP_Distance = false
+
 local ESPObjects = {}
 
 -- สีตามทีม
@@ -399,37 +402,49 @@ local TeamColors = {
     Criminals = Color3.fromRGB(170, 0, 0)      -- แดงเข้ม
 }
 
--- Toggle
+------------------------------------------------
+-- Toggles
+------------------------------------------------
 ESPTab:Toggle({
-    Title = "ESP Full",
+    Title = "ESP Name",
     Default = false,
-    Callback = function(state)
-        ESPEnabled = state
-        for _, v in pairs(ESPObjects) do
-            for _, gui in pairs(v) do
-                gui.Enabled = state
-            end
-        end
+    Callback = function(v)
+        ESP_Name = v
     end
 })
 
--- สร้าง ESP
+ESPTab:Toggle({
+    Title = "ESP Health",
+    Default = false,
+    Callback = function(v)
+        ESP_Health = v
+    end
+})
+
+ESPTab:Toggle({
+    Title = "ESP Distance",
+    Default = false,
+    Callback = function(v)
+        ESP_Distance = v
+    end
+})
+
+------------------------------------------------
+-- Create ESP
+------------------------------------------------
 local function CreateESP(plr)
     if ESPObjects[plr] then return end
-    ESPObjects[plr] = {}
 
-    -- ===== Name + HP (บนหัว) =====
+    -- ===== Head GUI =====
     local HeadGui = Instance.new("BillboardGui")
     HeadGui.Size = UDim2.new(0, 200, 0, 40)
     HeadGui.StudsOffset = Vector3.new(0, 2.5, 0)
     HeadGui.AlwaysOnTop = true
-    HeadGui.Enabled = ESPEnabled
     HeadGui.Parent = game:GetService("CoreGui")
 
     local NameLabel = Instance.new("TextLabel")
     NameLabel.Size = UDim2.new(1, 0, 0.5, 0)
     NameLabel.BackgroundTransparency = 1
-    NameLabel.TextScaled = false
     NameLabel.TextSize = 14
     NameLabel.Font = Enum.Font.SourceSansBold
     NameLabel.TextStrokeTransparency = 0
@@ -439,18 +454,16 @@ local function CreateESP(plr)
     HPLabel.Position = UDim2.new(0, 0, 0.5, 0)
     HPLabel.Size = UDim2.new(1, 0, 0.5, 0)
     HPLabel.BackgroundTransparency = 1
-    HPLabel.TextScaled = false
     HPLabel.TextSize = 14
     HPLabel.Font = Enum.Font.SourceSans
     HPLabel.TextStrokeTransparency = 0
     HPLabel.Parent = HeadGui
 
-    -- ===== Distance (ใต้เท้า) =====
+    -- ===== Foot GUI =====
     local FootGui = Instance.new("BillboardGui")
     FootGui.Size = UDim2.new(0, 200, 0, 20)
     FootGui.StudsOffset = Vector3.new(0, -3, 0)
     FootGui.AlwaysOnTop = true
-    FootGui.Enabled = ESPEnabled
     FootGui.Parent = game:GetService("CoreGui")
 
     local DistLabel = Instance.new("TextLabel")
@@ -470,7 +483,9 @@ local function CreateESP(plr)
     }
 end
 
--- ลบ ESP
+------------------------------------------------
+-- Remove ESP
+------------------------------------------------
 local function RemoveESP(plr)
     if ESPObjects[plr] then
         for _, v in pairs(ESPObjects[plr]) do
@@ -482,17 +497,17 @@ local function RemoveESP(plr)
     end
 end
 
--- อัปเดต ESP
+------------------------------------------------
+-- Update ESP
+------------------------------------------------
 RunService.RenderStepped:Connect(function()
-    if not ESPEnabled then return end
-
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer then
             if not ESPObjects[plr] then
                 CreateESP(plr)
             end
 
-            local data = ESPObjects[plr]
+            local esp = ESPObjects[plr]
             local char = plr.Character
             local hum = char and char:FindFirstChildOfClass("Humanoid")
             local head = char and char:FindFirstChild("Head")
@@ -501,22 +516,27 @@ RunService.RenderStepped:Connect(function()
             if char and hum and head and hrp then
                 local teamColor = TeamColors[plr.Team and plr.Team.Name] or Color3.new(1,1,1)
 
-                data.HeadGui.Adornee = head
-                data.FootGui.Adornee = hrp
+                esp.HeadGui.Adornee = head
+                esp.FootGui.Adornee = hrp
 
-                data.NameLabel.Text = plr.Name
-                data.NameLabel.TextColor3 = teamColor
+                -- Name
+                esp.NameLabel.Visible = ESP_Name
+                esp.NameLabel.Text = plr.Name
+                esp.NameLabel.TextColor3 = teamColor
 
-                data.HPLabel.Text = "HP: "..math.floor(hum.Health)
-                data.HPLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+                -- Health
+                esp.HPLabel.Visible = ESP_Health
+                esp.HPLabel.Text = "HP: " .. math.floor(hum.Health)
+                esp.HPLabel.TextColor3 = Color3.fromRGB(0,255,0)
 
+                -- Distance
+                esp.FootGui.Enabled = ESP_Distance
                 local dist = (LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude
-                data.DistLabel.Text = string.format("[ %.0f m ]", dist)
-                data.DistLabel.TextColor3 = teamColor
+                esp.DistLabel.Text = string.format("[ %.0f m ]", dist)
+                esp.DistLabel.TextColor3 = teamColor
             end
         end
     end
 end)
 
--- ลบเมื่อออก
 Players.PlayerRemoving:Connect(RemoveESP)
