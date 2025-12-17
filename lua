@@ -86,12 +86,64 @@ CombatTab:Slider({
     end
 })
 
-
 ------------------------------------------------
--- SilentAim Team Filter (รวม Dropdown + GetTarget)
+-- SilentAim Team (Multi Select)
 ------------------------------------------------
 getgenv().SilentAimbot = true
 
+local SilentAimTeams = {} -- เลือกได้หลายทีม
+
+CombatTab:Dropdown({
+    Title = "SilentAim Team",
+    Description = "Select teams to lock",
+    Values = {
+        "Guards",
+        "Criminals",
+        "Inmates"
+    },
+    Multi = true,
+    Default = {},
+    Callback = function(selected)
+        SilentAimTeams = {}
+        for _, teamName in ipairs(selected) do
+            SilentAimTeams[teamName] = true
+        end
+    end
+})
+
+-- GetTarget (รองรับหลายทีม + FOV)
+local function GetTarget()
+    if not next(SilentAimTeams) then return nil end
+
+    local closest, bestDist = nil, math.huge
+    local center = Camera.ViewportSize / 2
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer
+        and plr.Team
+        and SilentAimTeams[plr.Team.Name]
+        and plr.Character
+        and plr.Character:FindFirstChild("Head") then
+
+            local head = plr.Character.Head
+            local pos, onScreen = Camera:WorldToViewportPoint(head.Position)
+
+            if onScreen then
+                local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                if dist <= FOVRadius and dist < bestDist then
+                    bestDist = dist
+                    closest = head
+                end
+            end
+        end
+    end
+
+    return closest
+end
+
+------------------------------------------------
+-- SilentAim Hook (ของเดิม)
+------------------------------------------------
 local castRay
 for _, fn in ipairs(getgc(true)) do
     if typeof(fn) == "function" then
@@ -120,7 +172,7 @@ if castRay then
 end
 
 ------------------------------------------------
--- Render (FOV + เส้นแดง)
+-- Render (FOV + เส้นแดงจากกลางจอ)
 ------------------------------------------------
 RunService.RenderStepped:Connect(function()
     if not FOVEnabled then
@@ -157,81 +209,24 @@ RunService.RenderStepped:Connect(function()
 end)
 
 ------------------------------------------------
--- Player
+-- Player (NoClip)
 ------------------------------------------------
-PlayerTab:Slider({
-    Title = "WalkSpeed",
-    Step = 1,
-    Value = {Min = 16, Max = 200, Default = 16},
-    Callback = function(v)
-        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-        if hum then hum.WalkSpeed = v end
-    end
-})
 
-PlayerTab:Slider({
-    Title = "JumpPower",
-    Step = 1,
-    Value = {Min = 50, Max = 300, Default = 50},
-    Callback = function(v)
-        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-        if hum then hum.JumpPower = v end
-    end
-})
+local SavedWalkSpeed = 16
+local SavedJumpPower = 50
 
-------------------------------------------------
--- ESP
-------------------------------------------------
-local ESPLabels = {}
-local ESPEnabled = false
+LocalPlayer.CharacterAdded:Connect(function(char)
+    local hum = char:WaitForChild("Humanoid")
 
-local function CreateESP(plr)
-    if ESPLabels[plr] then return end
-
-    local bb = Instance.new("BillboardGui")
-    bb.Size = UDim2.new(0,100,0,20)
-    bb.AlwaysOnTop = true
-    bb.Enabled = ESPEnabled
-
-    local txt = Instance.new("TextLabel")
-    txt.Size = UDim2.fromScale(1,1)
-    txt.BackgroundTransparency = 1
-    txt.Text = plr.Name
-    txt.Font = Enum.Font.SourceSansBold
-    txt.TextSize = 14
-    txt.Parent = bb
-
-    bb.Parent = game:GetService("CoreGui")
-    ESPLabels[plr] = bb
-end
-
-ESPTab:Toggle({
-    Title = "ESP Name",
-    Default = false,
-    Callback = function(state)
-        ESPEnabled = state
-        for _, bb in pairs(ESPLabels) do
-            bb.Enabled = state
-        end
-    end
-})
-
-RunService.RenderStepped:Connect(function()
-    for plr, bb in pairs(ESPLabels) do
-        if plr.Character and plr.Character:FindFirstChild("Head") then
-            bb.Adornee = plr.Character.Head
-            bb.Enabled = ESPEnabled
-        end
-    end
+    task.wait(0.1) -- กันบางเกมรีเซ็ตทับ
+    hum.WalkSpeed = SavedWalkSpeed
+    hum.JumpPower = SavedJumpPower
 end)
 
-------------------------------------------------
--- NoClip
-------------------------------------------------
 local NoClip = false
 
 PlayerTab:Toggle({
-    Title = "WalkThrough (NoClip)",
+    Title = "NoClip",
     Default = false,
     Callback = function(state)
         NoClip = state
@@ -248,11 +243,49 @@ RunService.Stepped:Connect(function()
     end
 end)
 
+PlayerTab:Slider({
+    Title = "WalkSpeed",
+    Step = 1,
+    Value = {
+        Min = 16,
+        Max = 200,
+        Default = 16
+    },
+    Callback = function(value)
+        SavedWalkSpeed = value
+
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.WalkSpeed = value
+        end
+    end
+})
+
+PlayerTab:Slider({
+    Title = "JumpPower",
+    Step = 1,
+    Value = {
+        Min = 50,
+        Max = 300,
+        Default = 50
+    },
+    Callback = function(value)
+        SavedJumpPower = value
+
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.JumpPower = value
+        end
+    end
+})
+
 ------------------------------------------------
 -- Teleport
 ------------------------------------------------
 TeleportTab:Button({
-    Title = "TP to Tower",
+    Title = "TP Tower",
     Callback = function()
         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if hrp then
@@ -262,7 +295,7 @@ TeleportTab:Button({
 })
 
 TeleportTab:Button({
-    Title = "TP to Thief",
+    Title = "TP Thief",
     Callback = function()
         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if hrp then
@@ -274,77 +307,57 @@ TeleportTab:Button({
 TeleportTab:Button({
     Title = "TP MP5 (Get & Back)",
     Callback = function()
-        local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
 
-        local oldCFrame = hrp.CFrame
-
-        -- TP ไปจุด MP5
-        hrp.CFrame = CFrame.new(
-            813.44921875,
-            99.18183135986328,
-            2229.074462890625
-        )
-
+        local old = hrp.CFrame
+        hrp.CFrame = CFrame.new(813.44921875,99.18183135986328,2229.074462890625)
         task.wait(0.3)
 
-        -- แตะ TouchGiver
         local obj = workspace:GetChildren()[187]
         if obj and obj:FindFirstChild("TouchGiver") then
             firetouchinterest(hrp, obj.TouchGiver, 0)
-            task.wait()
             firetouchinterest(hrp, obj.TouchGiver, 1)
         end
 
         task.wait(0.3)
-        hrp.CFrame = oldCFrame
+        hrp.CFrame = old
     end
 })
-
 
 TeleportTab:Button({
     Title = "TP Remington (Get & Back)",
     Callback = function()
-        local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
 
-        local oldCFrame = hrp.CFrame
-
-        -- TP ไปจุด Remington
-        hrp.CFrame = CFrame.new(
-            821.404541015625,
-            98.10057830810547,
-            2228.724853515625
-        )
-
+        local old = hrp.CFrame
+        hrp.CFrame = CFrame.new(821.404541015625,98.10057830810547,2228.724853515625)
         task.wait(0.3)
 
-        -- แตะ TouchGiver
         local obj = workspace:GetChildren()[183]
         if obj and obj:FindFirstChild("TouchGiver") then
             firetouchinterest(hrp, obj.TouchGiver, 0)
-            task.wait()
             firetouchinterest(hrp, obj.TouchGiver, 1)
         end
 
         task.wait(0.3)
-        hrp.CFrame = oldCFrame
+        hrp.CFrame = old
     end
 })
 
+------------------------------------------------
 -- Arrest Aura
-
+------------------------------------------------
 local ArrestRemote = ReplicatedStorage
     :WaitForChild("Remotes")
     :WaitForChild("ArrestPlayer")
 
 local ArrestAuraEnabled = false
-local DISTANCE = 10 -- ปรับระยะได้
+local DISTANCE = 10
 
 CombatTab:Toggle({
-    Title = "arrest aura",
+    Title = "Arrest Aura",
     Description = "Only the police",
     Default = false,
     Callback = function(state)
@@ -356,76 +369,18 @@ task.spawn(function()
     while task.wait(0.2) do
         if not ArrestAuraEnabled then continue end
 
-        local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not hrp then continue end
 
         for _, plr in pairs(Players:GetPlayers()) do
             if plr ~= LocalPlayer and plr.Character then
                 local thrp = plr.Character:FindFirstChild("HumanoidRootPart")
-                if thrp then
-                    local dist = (hrp.Position - thrp.Position).Magnitude
-                    if dist <= DISTANCE then
-                        pcall(function()
-                            ArrestRemote:InvokeServer(plr)
-                        end)
-                    end
+                if thrp and (hrp.Position - thrp.Position).Magnitude <= DISTANCE then
+                    pcall(function()
+                        ArrestRemote:InvokeServer(plr)
+                    end)
                 end
             end
         end
     end
 end)
-
-------------------------------------------------
--- SilentAim Team Filter (รวม Dropdown + GetTarget)
-------------------------------------------------
-
--- ทีมที่เลือกให้ SilentAim ล็อค
-local SilentAimTeam = nil
--- nil = ไม่ล็อค
--- "Guards" / "Criminals" / "Inmates"
-
--- Dropdown เลือกทีม
-CombatTab:Dropdown({
-    Title = "SilentAim Team",
-    Description = "Select team to lock",
-    Values = {
-        "Guards",
-        "Criminals",
-        "Inmates"
-    },
-    Default = nil,
-    Callback = function(v)
-        SilentAimTeam = v
-    end
-})
-
--- GetTarget (เช็กทีม + FOV)
-local function GetTarget()
-    if not SilentAimTeam then return nil end
-
-    local closest, bestDist = nil, math.huge
-    local center = Camera.ViewportSize / 2
-
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer
-        and plr.Team
-        and plr.Team.Name == SilentAimTeam
-        and plr.Character
-        and plr.Character:FindFirstChild("Head") then
-
-            local head = plr.Character.Head
-            local pos, onScreen = Camera:WorldToViewportPoint(head.Position)
-
-            if onScreen then
-                local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                if dist <= FOVRadius and dist < bestDist then
-                    bestDist = dist
-                    closest = head
-                end
-            end
-        end
-    end
-
-    return closest
-end
